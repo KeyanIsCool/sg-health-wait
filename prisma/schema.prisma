@@ -1,0 +1,131 @@
+// SQLite for local dev. For prod, change provider to "postgresql".
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Facility: hospital A&E, polyclinic, private GP, or private hospital.
+model Facility {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  name            String
+  type            String   // AE | HOSPITAL | POLYCLINIC | PRIVATE_GP | PRIVATE_HOSPITAL
+  ownership       String   // PUBLIC | PRIVATE
+  address         String
+  postalCode      String?
+  latitude        Float
+  longitude       Float
+  phone           String?
+  websiteUrl      String?
+  bookingUrl      String?
+  description     String?
+  twentyFourHour  Boolean  @default(false)
+  appointmentReleaseTime String? // "22:00" local SGT
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hours           FacilityHours[]
+  services        FacilityService[]
+  waitTimes       WaitTime[]
+  crowdReports    CrowdReport[]
+  reminders       Reminder[]
+
+  @@index([type])
+  @@index([ownership])
+  @@index([latitude, longitude])
+  @@index([postalCode])
+  @@index([active])
+}
+
+model FacilityHours {
+  id         String  @id @default(cuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int     // 0=Sunday .. 6=Saturday
+  openMin    Int     // minutes after midnight
+  closeMin   Int
+  closed     Boolean @default(false)
+
+  @@index([facilityId])
+}
+
+model FacilityService {
+  id         String  @id @default(cuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  label      String
+
+  @@index([facilityId])
+}
+
+model WaitTime {
+  id               String   @id @default(cuid())
+  facilityId       String
+  facility         Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  waitType         String   // AE | CONSULT
+  waitMinutes      Int
+  confidence       String   // HIGH | MEDIUM | LOW
+  sourceType       String   // OFFICIAL | SCRAPED | CROWDSOURCED | MANUAL | ESTIMATED
+  sourceName       String
+  reportedAt       DateTime @default(now())
+  expiresAt        DateTime
+  collectionMethod String?
+
+  @@index([facilityId, reportedAt])
+  @@index([expiresAt])
+}
+
+model CrowdReport {
+  id          String   @id @default(cuid())
+  facilityId  String
+  facility    Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  bucket      String   // LT_15 | B_15_30 | B_30_60 | B_60_120 | GT_120
+  arrivedMinAgo Int?
+  deviceHash  String   // anonymous hash from IP+UA, never raw IP
+  createdAt   DateTime @default(now())
+  flagged     Boolean  @default(false)
+
+  @@index([facilityId, createdAt])
+  @@index([deviceHash, createdAt])
+}
+
+model Reminder {
+  id              String   @id @default(cuid())
+  facilityId      String
+  facility        Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  // local reminder is managed client-side; this is for optional email/push
+  channel         String   // LOCAL | EMAIL | WEBPUSH
+  contact         String?  // email or push subscription JSON
+  minutesBefore   Int      @default(10)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([facilityId])
+}
+
+model DataSourceStatus {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  kind            String   // OFFICIAL | SCRAPED | CROWD | MANUAL
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
+  lastError       String?
+  recordsProcessed Int     @default(0)
+  recordsRejected  Int     @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String
+  bodyMd      String
+  publishedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
